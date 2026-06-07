@@ -22,15 +22,35 @@ def parse_args():
 
     return args
 
+def find_model_path(base_path):
+    '''Find the actual model path, handling sweep job output structure'''
+    if os.path.exists(os.path.join(base_path, "MLmodel")):
+        return base_path
+    
+    for root, dirs, files in os.walk(base_path):
+        if "MLmodel" in files:
+            return root
+    
+    return base_path
+
 def main(args):
     '''Loads the best-trained model from the sweep job and registers it'''
 
     print("Registering ", args.model_name)
+    print("Model path: ", args.model_path)
 
-    # Step 1: Load the model from the specified path
-    model = mlflow.sklearn.load_model(args.model_path)
+    if os.path.exists(args.model_path):
+        print("Contents of model path:")
+        for item in os.listdir(args.model_path):
+            print(f"  {item}")
 
-    # Step 2: Log the loaded model in MLflow
+    actual_model_path = find_model_path(args.model_path)
+    print(f"Actual model path: {actual_model_path}")
+
+    # Step 1: Load the model
+    model = mlflow.sklearn.load_model(actual_model_path)
+
+    # Step 2: Log and register the model
     with mlflow.start_run():
         mlflow.sklearn.log_model(
             model,
@@ -38,14 +58,14 @@ def main(args):
         )
         run_id = mlflow.active_run().info.run_id
 
-    # Step 3: Register the logged model
+    # Step 3: Register the model
     model_uri = f"runs:/{run_id}/{args.model_name}"
     registered_model = mlflow.register_model(
         model_uri=model_uri,
         name=args.model_name
     )
 
-    # Step 4: Write model registration details to JSON file
+    # Step 4: Write model info to JSON
     os.makedirs(args.model_info_output_path, exist_ok=True)
     model_info = {
         "model_name": registered_model.name,
@@ -61,7 +81,6 @@ if __name__ == "__main__":
 
     mlflow.start_run()
 
-    # Parse Arguments
     args = parse_args()
 
     lines = [
