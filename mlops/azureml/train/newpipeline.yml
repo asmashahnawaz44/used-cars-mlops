@@ -14,6 +14,8 @@ outputs:
     type: uri_folder
   test_data:
     type: uri_folder
+  model_output:
+    type: uri_folder
   model_info_output_path:
     type: uri_folder
 
@@ -39,32 +41,23 @@ jobs:
       train_data: ${{parent.outputs.train_data}}
       test_data: ${{parent.outputs.test_data}}
 
-  sweep_step:
-    name: sweep_step
-    display_name: sweep-step
-    type: sweep
+  train_model:
+    name: train_model
+    display_name: train-model
+    code: ../../../data-science/src
+    command: >-
+      python train.py 
+      --train_data ${{inputs.train_data}}
+      --test_data ${{inputs.test_data}}
+      --n_estimators 100
+      --max_depth 5
+      --model_output ${{outputs.model_output}}
+    environment: azureml:used-cars-train-env@latest
     inputs:
       train_data: ${{parent.jobs.prep_data.outputs.train_data}}
       test_data: ${{parent.jobs.prep_data.outputs.test_data}}
     outputs:
-      model_output:
-        type: uri_folder
-    sampling_algorithm: random
-    trial: ./train.yml
-    search_space:
-      n_estimators:
-        type: choice
-        values: [10, 20, 30, 50]
-      max_depth:
-        type: choice
-        values: [3, 5, 7, 10]
-    objective:
-      goal: minimize
-      primary_metric: MSE
-    limits:
-      max_total_trials: 20
-      max_concurrent_trials: 10
-      timeout: 7200
+      model_output: ${{parent.outputs.model_output}}
 
   register_model:
     name: register_model
@@ -78,6 +71,6 @@ jobs:
     environment: azureml:used-cars-train-env@latest
     inputs:
       model_name: "used_cars_price_prediction_model"
-      model_path: ${{parent.jobs.sweep_step.outputs.model_output}}
+      model_path: ${{parent.jobs.train_model.outputs.model_output}}
     outputs:
       model_info_output_path: ${{parent.outputs.model_info_output_path}}

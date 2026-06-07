@@ -14,62 +14,79 @@ import mlflow.sklearn
 
 def parse_args():
     '''Parse input arguments'''
-
     parser = argparse.ArgumentParser("train")
-
-    # Step 1: Define arguments for train data, test data, model output, and hyperparameters
     parser.add_argument("--train_data", type=str, help="Path to train dataset")
     parser.add_argument("--test_data", type=str, help="Path to test dataset")
     parser.add_argument("--model_output", type=str, help="Path to save trained model")
-    parser.add_argument("--n_estimators", type=int, default=100, help="Number of trees in the forest")
-    parser.add_argument("--max_depth", type=int, default=5, help="Maximum depth of the trees")
-
+    parser.add_argument("--n_estimators", type=int, default=100)
+    parser.add_argument("--max_depth", type=int, default=5)
     args = parser.parse_args()
-
     return args
 
 def main(args):
     '''Read train and test datasets, train model, evaluate model, save trained model'''
 
-    # Step 2: Read the train and test datasets
+    # Read data
     train_df = pd.read_csv(Path(args.train_data) / "train.csv")
     test_df = pd.read_csv(Path(args.test_data) / "test.csv")
 
-    # Step 3: Split the data into features (X) and target (y)
+    # Split features and target
     X_train = train_df.drop(columns=["price"])
     y_train = train_df["price"]
     X_test = test_df.drop(columns=["price"])
     y_test = test_df["price"]
 
-    # Step 4: Initialize and train the RandomForest Regressor
-    model = RandomForestRegressor(
-        n_estimators=args.n_estimators,
-        max_depth=args.max_depth,
-        random_state=42
-    )
-    model.fit(X_train, y_train)
+    # Hyperparameter tuning - try multiple combinations and log each to MLflow
+    param_grid = [
+        {"n_estimators": 10, "max_depth": 3},
+        {"n_estimators": 20, "max_depth": 5},
+        {"n_estimators": 50, "max_depth": 7},
+        {"n_estimators": 100, "max_depth": 5},
+        {"n_estimators": 150, "max_depth": 10},
+        {"n_estimators": 200, "max_depth": 7},
+    ]
 
-    # Step 5: Log model hyperparameters in MLflow
-    mlflow.log_param("n_estimators", args.n_estimators)
-    mlflow.log_param("max_depth", args.max_depth)
+    best_mse = float("inf")
+    best_model = None
+    best_params = None
 
-    # Step 6: Predict and calculate MSE
-    y_pred = model.predict(X_test)
-    mse = mean_squared_error(y_test, y_pred)
+    for params in param_grid:
+        with mlflow.start_run(nested=True):
+            model = RandomForestRegressor(
+                n_estimators=params["n_estimators"],
+                max_depth=params["max_depth"],
+                random_state=42
+            )
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            mse = mean_squared_error(y_test, y_pred)
 
-    # Step 7: Log MSE metric and save the trained model
-    mlflow.log_metric("mse", mse)
-    print(f"MSE: {mse}")
+            # Log params and metrics
+            mlflow.log_param("n_estimators", params["n_estimators"])
+            mlflow.log_param("max_depth", params["max_depth"])
+            mlflow.log_metric("MSE", mse)
 
-    mlflow.sklearn.save_model(model, args.model_output)
-    print(f"Model saved to: {args.model_output}")
+            print(f"n_estimators={params['n_estimators']}, max_depth={params['max_depth']}, MSE={mse}")
+
+            if mse < best_mse:
+                best_mse = mse
+                best_model = model
+                best_params = params
+
+    print(f"\nBest params: {best_params}, Best MSE: {best_mse}")
+
+    # Log best params and metrics
+    mlflow.log_param("best_n_estimators", best_params["n_estimators"])
+    mlflow.log_param("best_max_depth", best_params["max_depth"])
+    mlflow.log_metric("best_MSE", best_mse)
+
+    # Save best model
+    mlflow.sklearn.save_model(best_model, args.model_output)
+    print(f"Best model saved to: {args.model_output}")
 
 
 if __name__ == "__main__":
-
     mlflow.start_run()
-
-    # Parse Arguments
     args = parse_args()
 
     lines = [
@@ -79,10 +96,8 @@ if __name__ == "__main__":
         f"Number of Estimators: {args.n_estimators}",
         f"Max Depth: {args.max_depth}"
     ]
-
     for line in lines:
         print(line)
 
     main(args)
-
     mlflow.end_run()
