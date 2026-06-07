@@ -1,2 +1,6 @@
-resource_group: Projects_RG
-aml_workspace: ML_Projects
+variables:
+  namespace: used-cars-mlops
+  resource_group: Projects_RG
+  aml_workspace: ML_Projects
+  location: eastus2
+  env: prod
