@@ -1,5 +1,8 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+# Updated for CI/CD validation - v2
+
 """
 Prepares raw data and provides training and test datasets.
 """
